@@ -1,0 +1,167 @@
+import pygame
+import sys
+import random
+
+# 初期化
+pygame.init()
+
+# 画面サイズ
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("ブロック崩しゲーム")
+
+# 色の定義
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
+
+# FPS設定
+clock = pygame.time.Clock()
+FPS = 60
+
+# パドルクラス
+class Paddle(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.width = 100
+        self.height = 15
+        self.image = pygame.Surface((self.width, self.height))
+        self.image.fill(BLUE)
+        self.rect = self.image.get_rect()
+        self.rect.midbottom = (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30)
+        self.speed = 8
+
+    def update(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.rect.x -= self.speed
+        if keys[pygame.K_RIGHT]:
+            self.rect.x += self.speed
+
+        # 画面外に出ないようにする
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
+
+# ボールクラス
+class Ball(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.radius = 10
+        self.image = pygame.Surface((self.radius*2, self.radius*2), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, RED, (self.radius, self.radius), self.radius)
+        self.rect = self.image.get_rect()
+        self.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        self.speed_x = random.choice([-4, 4])
+        self.speed_y = -4
+
+    def update(self):
+        self.rect.x += self.speed_x
+        self.rect.y += self.speed_y
+
+        # 壁で跳ね返る
+        if self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH:
+            self.speed_x = -self.speed_x
+        if self.rect.top <= 0:
+            self.speed_y = -self.speed_y
+
+# ブロッククラス
+class Brick(pygame.sprite.Sprite):
+    def __init__(self, x, y, width=75, height=20, color=GREEN):
+        super().__init__()
+        self.image = pygame.Surface((width, height))
+        self.image.fill(color)
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+def create_bricks(rows, cols):
+    bricks = pygame.sprite.Group()
+    padding = 5
+    brick_width = (SCREEN_WIDTH - (cols+1)*padding) // cols
+    brick_height = 20
+    for row in range(rows):
+        for col in range(cols):
+            x = padding + col * (brick_width + padding)
+            y = padding + row * (brick_height + padding) + 50  # 上部からのオフセット
+            color = random.choice([GREEN, YELLOW, BLUE])
+            brick = Brick(x, y, brick_width, brick_height, color)
+            bricks.add(brick)
+    return bricks
+
+def main():
+    # スプライトグループの作成
+    all_sprites = pygame.sprite.Group()
+    paddle = Paddle()
+    ball = Ball()
+    all_sprites.add(paddle)
+    all_sprites.add(ball)
+    bricks = create_bricks(5, 10)  # 5行×10列のブロック
+
+    score = 0
+    font = pygame.font.SysFont("Arial", 24)
+
+    running = True
+    game_over = False
+    while running:
+        clock.tick(FPS)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        if not game_over:
+            # スプライトの更新
+            all_sprites.update()
+
+            # パドルとの衝突判定
+            if pygame.sprite.collide_rect(ball, paddle):
+                # 衝突位置によって反射角を変える
+                offset = (ball.rect.centerx - paddle.rect.centerx) / (paddle.width / 2)
+                ball.speed_x = 4 * offset
+                ball.speed_y = -abs(ball.speed_y)
+
+            # ボールとブロックの衝突判定
+            hit_bricks = pygame.sprite.spritecollide(ball, bricks, True)
+            if hit_bricks:
+                ball.speed_y = -ball.speed_y
+                score += len(hit_bricks) * 10
+
+            # ボールが画面下部に到達 → ゲームオーバー
+            if ball.rect.top > SCREEN_HEIGHT:
+                game_over = True
+
+            # 全てのブロックを破壊したらクリア
+            if len(bricks) == 0:
+                game_over = True
+
+        # 描画
+        screen.fill(BLACK)
+        all_sprites.draw(screen)
+        bricks.draw(screen)
+
+        # スコア表示
+        score_text = font.render(f"Score: {score}", True, WHITE)
+        screen.blit(score_text, (10, SCREEN_HEIGHT - 30))
+
+        if game_over:
+            # 終了メッセージ
+            if len(bricks) == 0:
+                msg = "CLEAR!"
+            else:
+                msg = "GAME OVER"
+            msg_text = font.render(msg, True, WHITE)
+            text_rect = msg_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            screen.blit(msg_text, text_rect)
+
+        pygame.display.flip()
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
